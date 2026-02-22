@@ -1,0 +1,6 @@
+sqlite3
+python-dotenv
+aiogram==3.*
+aiohttp
+requests
+Pillow
