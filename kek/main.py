@@ -34,6 +34,7 @@ router = Router()
 from pathlib import Path
 from io import BytesIO
 from aiogram.types import BufferedInputFile
+from aiogram.types import ChatMemberUpdated
 ADMIN_IDS = {1418123274}
 BASE_DIR = Path(__file__).resolve().parent
 PHOTOS_DIR = BASE_DIR / "photos"
@@ -1207,6 +1208,26 @@ async def show_gender_category_handler(callback: CallbackQuery, state: FSMContex
     )
     
     await callback.answer()
+
+@dp.my_chat_member()
+async def on_my_chat_member(update: ChatMemberUpdated):
+    tg_id = update.from_user.id if update.from_user else update.chat.id
+
+    old = update.old_chat_member.status
+    new = update.new_chat_member.status
+
+    username = update.from_user.username if update.from_user and update.from_user.username else None
+    if username:
+        username = f"@{username}"
+
+    # пользователь заблокировал/удалил бота
+    if new in ("kicked", "left"):
+        await track(tg_id, "bot_blocked", value=new, username=username)
+
+    # пользователь снова запустил/разблокировал
+    elif new in ("member",):
+        await track(tg_id, "bot_unblocked", value=new, username=username)
+
 
 @dp.callback_query(F.data.regexp(r"^(gender|scent)_(prev|next)_\d+$"))
 async def category_navigation_handler(callback: CallbackQuery, state: FSMContext):
