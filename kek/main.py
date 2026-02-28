@@ -54,7 +54,7 @@ def get_photo_input(perfume: dict):
     url = normalize_photo_url(raw)
 
     if not url:
-        return FSInputFile(NO_IMAGE_PATH)
+        return url
 
     return URLInputFile(url)
 async def fetch_perfumes():
@@ -1121,6 +1121,8 @@ def normalize_gender(value: str) -> str:
     return ""
 @dp.callback_query(F.data.startswith("cat_gender_"))
 async def show_gender_category_handler(callback: CallbackQuery, state: FSMContext):
+    username = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
+    await track(callback.from_user.id, "category_click", username=username)
     gender_type = callback.data.replace("cat_gender_", "")
     
     # Маппинг callback-данных на значения категорий
@@ -1303,6 +1305,8 @@ async def category_navigation_handler(callback: CallbackQuery, state: FSMContext
 
 @dp.message(F.text == "📂 Категории")
 async def show_categories(message: Message, state: FSMContext):
+    username = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+    await track(message.from_user.id, "category_click", username=username)
     await message.answer(
         "📂 В данном разделе Вы сможете выбрать нужную категорию ароматов:",
         reply_markup=categories_keyboard()
@@ -1715,7 +1719,8 @@ def normalize_scent(value):
     return []
 @dp.callback_query(F.data.startswith("cat_scent_"))
 async def show_scent_category_handler(callback: CallbackQuery, state: FSMContext):
-    
+    username = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
+    await track(callback.from_user.id, "category_click", username=username)
 
     scent_map = {
         "floral": "цветочные",
