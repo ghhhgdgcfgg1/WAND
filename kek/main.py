@@ -35,6 +35,38 @@ from pathlib import Path
 from io import BytesIO
 from aiogram.types import BufferedInputFile
 from aiogram.types import ChatMemberUpdated
+import time
+from typing import Any, Awaitable, Callable, Dict
+from aiogram import BaseMiddleware
+class BanMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[Any, Dict[str, Any]], Awaitable[Any]],
+        event: Any,
+        data: Dict[str, Any]
+    ) -> Any:
+        user = getattr(event, "from_user", None)
+        if not user:
+            return await handler(event, data)
+
+        if await is_user_banned(user.id):
+            # Для callback, чтобы "часики" не крутились
+            if isinstance(event, CallbackQuery):
+                try:
+                    await event.answer("⛔ Вы заблокированы и не можете пользоваться ботом.", show_alert=True)
+                except Exception:
+                    pass
+            elif isinstance(event, Message):
+                try:
+                    await event.answer("⛔ Вы заблокированы и не можете пользоваться ботом.")
+                except Exception:
+                    pass
+            return  # блокируем обработку
+
+        return await handler(event, data)
+
+BAN_CACHE_TTL = 5  # секунд
+_ban_cache: dict[int, tuple[bool, float]] = {}
 ADMIN_IDS = {1418123274}
 BASE_DIR = Path(__file__).resolve().parent
 PHOTOS_DIR = BASE_DIR / "photos"
@@ -160,7 +192,8 @@ def add_card(telegram_id, product_id):
 ITEMS_PER_PAGE = 5
 bot = Bot(token=token)
 dp = Dispatcher()
-
+dp.message.middleware(BanMiddleware())
+dp.callback_query.middleware(BanMiddleware())
 # Новые состояния для разных типов поиска
 class SearchState(StatesGroup):
     waiting_query = State()
@@ -270,6 +303,28 @@ def order_keyboard(source: str, index: int,perfume_id: int):
 
     kb.adjust(1)
     return kb.as_markup()
+
+async def is_user_banned(telegram_id: int) -> bool:
+    now = time.time()
+    cached = _ban_cache.get(telegram_id)
+    if cached and (now - cached[1] < BAN_CACHE_TTL):
+        return cached[0]
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{FLASK_URL}/api/users/{telegram_id}/status") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    banned = bool(data.get("is_banned", False))
+                    _ban_cache[telegram_id] = (banned, now)
+                    return banned
+                else:
+                    txt = await resp.text()
+                    print(f"[BAN CHECK] status={resp.status}, body={txt[:200]}")
+    except Exception:
+        pass
+
+    return False
 async def url_to_telegram_file(url: str, filename="photo.jpg"):
     async with aiohttp.ClientSession() as session:
         async with session.get(url, allow_redirects=True) as r:
